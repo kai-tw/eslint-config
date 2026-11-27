@@ -101,6 +101,13 @@ Each release is an annotated tag `vX.Y.Z` on `main`, on the commit that sets the
 `version` in `package.json`. A change to what a rule reports is a new version. Pin the tag,
 as in the install line above.
 
+## Releasing
+
+A release is a pull request that raises `version` in `package.json`. Once it merges to
+`main`, the `release-tag` workflow runs lint and the type check and creates the tag
+`v<version>` on that commit. It never moves an existing tag, and it refuses a version at or
+below the newest tag.
+
 ## Development
 
 ```sh
