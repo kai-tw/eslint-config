@@ -1,0 +1,62 @@
+name: release-tag
+
+# Tag the package.json version that reached `main` untagged.
+#
+# WHY A WORKFLOW
+#   A release lands on main as a GitHub squash-merge, created server-side when
+#   a PR merges, so no local hook runs for it. This workflow is what tags a
+#   PR-merged release.
+#
+# WHY IT RE-RUNS lint + typecheck ITSELF RATHER THAN WAITING ON `test`
+#   A tag is the statement that a version is final, and consumers install the
+#   package from it, so it should not land on a tree with a lint or type error
+#   (e.g. a commit made through GitHub's web UI, where no local check runs).
+#   Chaining on the separate `test` workflow's result would mean a
+#   `workflow_run` trigger, where the commit that triggered it and the commit
+#   this job checks out are two different things — re-running the cheap checks
+#   inline keeps the ref unambiguous. The test suite is deliberately NOT
+#   repeated here: test.yml already runs it on this same push.
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  tag:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # creates and pushes the tag
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0 # need the existing tags to know what's missing
+
+      # The same Node version as test.yml. Change the two together.
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: npm
+
+      - run: npm ci
+
+      - run: npx eslint .
+
+      - run: npx tsc --noEmit
+
+      - name: Create the missing tag
+        id: plan
+        run: |
+          set -euo pipefail
+          git config user.name  'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          tool/release_tag.sh --create
+
+      - name: Push it
+        if: steps.plan.outputs.tags != ''
+        env:
+          TAGS: ${{ steps.plan.outputs.tags }}
+        run: git push --atomic origin "$TAGS"
